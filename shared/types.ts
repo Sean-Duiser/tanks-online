@@ -22,10 +22,13 @@ export interface Projectile {
 
 export type WeaponType = 'shell' | 'bouncer' | 'cluster';
 
+export type BiomeType = 'earth' | 'fire' | 'water' | 'air';
+
 export interface GameState {
   tanks: Tank[];           // exactly 2 tanks
   terrain: number[];       // height array (same as TerrainSegment.heights)
   wind: number;            // -10 to 10 (negative = left, positive = right)
+  biome: BiomeType;
   turnNumber: number;
   currentPlayerIndex: number; // 0 or 1
   lastShot?: {

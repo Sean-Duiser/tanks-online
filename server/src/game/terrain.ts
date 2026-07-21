@@ -1,37 +1,51 @@
-import type { Tank } from '../../../shared/types';
+import type { BiomeType, Tank } from '../../../shared/types';
 
 const CANVAS_WIDTH = 800;
 const CANVAS_HEIGHT = 500;
-const HEIGHT_MIN = 150;
-const HEIGHT_MAX = 450;
+
+type BiomeConfig = {
+  roughness: number;
+  minH: number;
+  maxH: number;
+  smoothPasses: number;
+};
+
+const BIOME_CONFIGS: Record<BiomeType, BiomeConfig> = {
+  earth: { roughness: 60,  minH: 200, maxH: 380, smoothPasses: 3 },
+  fire:  { roughness: 150, minH: 100, maxH: 480, smoothPasses: 1 },
+  water: { roughness: 25,  minH: 300, maxH: 430, smoothPasses: 5 },
+  air:   { roughness: 180, minH: 80,  maxH: 420, smoothPasses: 0 },
+};
 
 /**
- * Generate terrain heights using 1D midpoint displacement (diamond-square variant).
- * Returns an array of `canvasWidth` values representing the height from the
- * bottom of the canvas at each x column.
+ * Generate terrain heights using 1D midpoint displacement with biome-specific parameters.
+ * Returns an array of `canvasWidth` values representing pixel height from the canvas bottom.
  */
-export function generateTerrain(canvasWidth: number = CANVAS_WIDTH): number[] {
+export function generateTerrain(
+  biome: BiomeType,
+  canvasWidth: number = CANVAS_WIDTH,
+): number[] {
+  const config = BIOME_CONFIGS[biome];
   const size = nextPowerOfTwo(canvasWidth - 1) + 1;
   const heights = new Array<number>(size).fill(0);
 
-  heights[0] = lerp(HEIGHT_MIN, HEIGHT_MAX, 0.5);
-  heights[size - 1] = lerp(HEIGHT_MIN, HEIGHT_MAX, 0.5);
+  const midH = (config.minH + config.maxH) / 2;
+  heights[0] = midH;
+  heights[size - 1] = midH;
 
   let step = size - 1;
-  let roughness = 120;
+  let roughness = config.roughness;
 
   while (step > 1) {
     const half = Math.floor(step / 2);
-
-    // Midpoint pass
     for (let i = 0; i < size - 1; i += step) {
       const mid = i + half;
       if (mid < size) {
-        const avg = (heights[i] + heights[i + step < size ? i + step : size - 1]) / 2;
+        const right = i + step < size ? i + step : size - 1;
+        const avg = (heights[i] + heights[right]) / 2;
         heights[mid] = avg + (Math.random() * 2 - 1) * roughness;
       }
     }
-
     roughness *= 0.55;
     step = half;
   }
@@ -39,24 +53,35 @@ export function generateTerrain(canvasWidth: number = CANVAS_WIDTH): number[] {
   // Slice to exactly canvasWidth
   const raw = heights.slice(0, canvasWidth);
 
-  // 5-point moving average smoothing
-  const smoothed = [...raw];
-  for (let x = 2; x < canvasWidth - 2; x++) {
-    smoothed[x] = (raw[x - 2] + raw[x - 1] + raw[x] + raw[x + 1] + raw[x + 2]) / 5;
+  // Fire: force a volcanic cone near the centre before smoothing
+  if (biome === 'fire') {
+    const peakX = Math.floor(canvasWidth / 2);
+    const spikeWidth = 90;
+    for (let x = peakX - spikeWidth; x <= peakX + spikeWidth; x++) {
+      if (x >= 0 && x < canvasWidth) {
+        const dist = Math.abs(x - peakX);
+        const coneH = config.maxH * (1 - dist / spikeWidth);
+        raw[x] = Math.max(raw[x], coneH);
+      }
+    }
   }
 
-  // Clamp to valid height range
-  return smoothed.map((h) => Math.max(HEIGHT_MIN, Math.min(HEIGHT_MAX, h)));
+  // Smoothing passes
+  for (let pass = 0; pass < config.smoothPasses; pass++) {
+    const prev = [...raw];
+    for (let x = 2; x < canvasWidth - 2; x++) {
+      raw[x] = (prev[x - 2] + prev[x - 1] + prev[x] + prev[x + 1] + prev[x + 2]) / 5;
+    }
+  }
+
+  // Clamp to biome height range
+  return raw.map((h) => Math.max(config.minH, Math.min(config.maxH, h)));
 }
 
 function nextPowerOfTwo(n: number): number {
   let p = 1;
   while (p < n) p <<= 1;
   return p;
-}
-
-function lerp(a: number, b: number, t: number): number {
-  return a + (b - a) * t;
 }
 
 /**

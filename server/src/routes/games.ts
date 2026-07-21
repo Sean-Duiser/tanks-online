@@ -3,7 +3,7 @@ import { pool } from '../db/pool';
 import { requireAuth, AuthRequest } from '../middleware/auth';
 import { generateTerrain, placeTanks } from '../game/terrain';
 import { simulateShot } from '../../../shared/physics';
-import type { GameState, WeaponType } from '../../../shared/types';
+import type { BiomeType, GameState, WeaponType } from '../../../shared/types';
 
 const router = Router();
 
@@ -34,12 +34,19 @@ router.get('/', async (req: AuthRequest, res: Response): Promise<void> => {
 // POST /api/games — create new game
 router.post('/', async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const terrain = generateTerrain();
+    const { biome: requestedBiome } = req.body as { biome?: string };
+    const BIOMES: BiomeType[] = ['earth', 'fire', 'water', 'air'];
+    const biome: BiomeType = BIOMES.includes(requestedBiome as BiomeType)
+      ? (requestedBiome as BiomeType)
+      : BIOMES[Math.floor(Math.random() * BIOMES.length)];
+
+    const terrain = generateTerrain(biome);
     const tanks = placeTanks(terrain, req.userId as string, '__tbd__');
 
     const initialState: GameState = {
       tanks,
       terrain,
+      biome,
       wind: Math.round((Math.random() * 20 - 10) * 10) / 10,
       turnNumber: 0,
       currentPlayerIndex: 0,
@@ -230,6 +237,7 @@ router.post('/:id/turn', async (req: AuthRequest, res: Response): Promise<void> 
       tanks: newTanks,
       terrain: shotResult.terrainAfter,
       wind: newWind,
+      biome: state.biome,
       turnNumber: state.turnNumber + 1,
       currentPlayerIndex: nextPlayerIndex,
       lastShot: {
