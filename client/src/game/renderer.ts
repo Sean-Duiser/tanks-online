@@ -456,15 +456,28 @@ export function render(
   drawDecorations(ctx, displayTerrain, biome);
 
   for (let i = 0; i < tanks.length; i++) {
-    // During the player's active turn (not animating), preview movement position for the current player's tank
-    const isCurrentPlayerTank = i === myPlayerIndex;
-    const shouldPreview = isCurrentPlayerTank && rs.animFrame === null && movementDelta !== 0;
+    const isMyTank = i === myPlayerIndex;
     let tankToDraw = tanks[i];
 
-    if (shouldPreview) {
-      const previewX = Math.max(0, Math.min(CANVAS_WIDTH - 1, tanks[i].x + movementDelta));
-      const previewY = CANVAS_HEIGHT - displayTerrain[Math.round(previewX)];
-      tankToDraw = { ...tanks[i], x: previewX, y: previewY };
+    // While it's our turn and no animation is running, apply live overrides
+    if (isMyTank && rs.animFrame === null) {
+      const overrides: Partial<typeof tankToDraw> = {};
+
+      // Live barrel angle: always track the slider/key even between turns
+      if (gameState.currentPlayerIndex === myPlayerIndex) {
+        overrides.angle = myAngle;
+      }
+
+      // Movement position preview
+      if (movementDelta !== 0) {
+        const previewX = Math.max(0, Math.min(CANVAS_WIDTH - 1, tanks[i].x + movementDelta));
+        overrides.x = previewX;
+        overrides.y = CANVAS_HEIGHT - displayTerrain[Math.round(previewX)];
+      }
+
+      if (Object.keys(overrides).length > 0) {
+        tankToDraw = { ...tanks[i], ...overrides };
+      }
     }
 
     drawTankBody(ctx, tankToDraw, i === gameState.currentPlayerIndex);

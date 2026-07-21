@@ -11,6 +11,7 @@ const MAX_TICKS = 5000;
  * x is clamped to valid array bounds.
  */
 export function getTerrainHeight(terrain: number[], x: number): number {
+  if (!Number.isFinite(x)) return terrain[0] ?? 0;
   const xi = Math.max(0, Math.min(terrain.length - 1, Math.round(x)));
   return terrain[xi];
 }

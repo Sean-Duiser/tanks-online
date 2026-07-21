@@ -311,10 +311,11 @@ router.post('/:id/turn', async (req: AuthRequest, res: Response): Promise<void> 
       const botDifficulty: BotDifficulty = (state.botDifficulty as BotDifficulty) ?? 'medium';
       const botMove = computeBotShot(newState, botDifficulty);
 
-      // Apply bot movement before simulating shot
+      // Apply bot movement before simulating shot (guard against undefined if cached old bot)
       const botTankIndex = newState.currentPlayerIndex;
       const botTank = newState.tanks[botTankIndex];
-      const botNewX = Math.max(0, Math.min(CANVAS_WIDTH - 1, botTank.x + botMove.movement));
+      const botMoveDelta = botMove.movement ?? 0;
+      const botNewX = Math.max(0, Math.min(CANVAS_WIDTH - 1, botTank.x + botMoveDelta));
       const botNewY = CANVAS_HEIGHT - getTerrainHeight(newState.terrain, botNewX);
       const botMovedState: GameState = {
         ...newState,
@@ -403,8 +404,9 @@ router.post('/:id/turn', async (req: AuthRequest, res: Response): Promise<void> 
     res.json({ game: updatedResult.rows[0], humanShotSnapshot });
   } catch (err) {
     await client.query('ROLLBACK');
+    const msg = err instanceof Error ? err.message : String(err);
     console.error('Turn error:', err);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: `Internal server error: ${msg}` });
   } finally {
     client.release();
   }
