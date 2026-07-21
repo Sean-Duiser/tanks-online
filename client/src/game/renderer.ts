@@ -332,6 +332,7 @@ function drawHUD(
   myPower: number,
   myWeapon: string,
   biome: BiomeType,
+  movementRemaining: number,
 ): void {
   const isMyTurn = state.currentPlayerIndex === myPlayerIndex;
 
@@ -360,16 +361,23 @@ function drawHUD(
   ctx.textAlign = 'left';
   ctx.fillText(turnText, 10, 42);
 
-  // Angle / power / weapon stats — only when it's your turn
+  // Angle / power / weapon / movement stats — only when it's your turn
   if (isMyTurn) {
+    const BLOCK_COUNT = 10;
+    const filledBlocks = Math.round((movementRemaining / 60) * BLOCK_COUNT);
+    const bar = '█'.repeat(filledBlocks) + '░'.repeat(BLOCK_COUNT - filledBlocks);
+
     ctx.fillStyle = 'rgba(0,0,0,0.5)';
-    ctx.fillRect(8, 50, 220, 48);
+    ctx.fillRect(8, 50, 220, 62);
     ctx.fillStyle = '#fff';
     ctx.font = '12px monospace';
     ctx.textAlign = 'left';
     ctx.fillText(`Angle: ${myAngle}°`, 14, 67);
     ctx.fillText(`Power: ${myPower}`, 14, 82);
     ctx.fillText(`Weapon: ${myWeapon}`, 14, 97);
+    // Movement bar
+    ctx.fillStyle = movementRemaining > 30 ? '#27ae60' : movementRemaining > 10 ? '#f39c12' : '#e74c3c';
+    ctx.fillText(`Move: ${bar} ${movementRemaining}px`, 14, 112);
   }
 
   // Turn counter — top-right
@@ -428,13 +436,17 @@ export interface RenderState {
   myWeapon: string;
   /** Terrain as it currently appears (mid-animation vs post-animation) */
   displayTerrain: number[];
+  /** Accumulated movement this turn (px, negative=left, positive=right) */
+  movementDelta: number;
+  /** Remaining movement budget for this turn (60 - |movementDelta|) */
+  movementRemaining: number;
 }
 
 export function render(
   ctx: CanvasRenderingContext2D,
   rs: RenderState,
 ): void {
-  const { gameState, myPlayerIndex, myAngle, myPower, myWeapon, displayTerrain } = rs;
+  const { gameState, myPlayerIndex, myAngle, myPower, myWeapon, displayTerrain, movementDelta, movementRemaining } = rs;
   const { tanks } = gameState;
   const biome: BiomeType = gameState.biome ?? 'earth';
 
@@ -444,8 +456,19 @@ export function render(
   drawDecorations(ctx, displayTerrain, biome);
 
   for (let i = 0; i < tanks.length; i++) {
-    drawTankBody(ctx, tanks[i], i === gameState.currentPlayerIndex);
-    drawHealthBar(ctx, tanks[i]);
+    // During the player's active turn (not animating), preview movement position for the current player's tank
+    const isCurrentPlayerTank = i === myPlayerIndex;
+    const shouldPreview = isCurrentPlayerTank && rs.animFrame === null && movementDelta !== 0;
+    let tankToDraw = tanks[i];
+
+    if (shouldPreview) {
+      const previewX = Math.max(0, Math.min(CANVAS_WIDTH - 1, tanks[i].x + movementDelta));
+      const previewY = CANVAS_HEIGHT - displayTerrain[Math.round(previewX)];
+      tankToDraw = { ...tanks[i], x: previewX, y: previewY };
+    }
+
+    drawTankBody(ctx, tankToDraw, i === gameState.currentPlayerIndex);
+    drawHealthBar(ctx, tankToDraw);
   }
 
   // Animate projectile path
@@ -469,5 +492,5 @@ export function render(
     }
   }
 
-  drawHUD(ctx, gameState, myPlayerIndex, myAngle, myPower, myWeapon, biome);
+  drawHUD(ctx, gameState, myPlayerIndex, myAngle, myPower, myWeapon, biome, movementRemaining);
 }

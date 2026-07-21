@@ -3,7 +3,7 @@ import { pool } from '../db/pool';
 import { requireAuth, AuthRequest } from '../middleware/auth';
 import { generateTerrain, placeTanks } from '../game/terrain';
 import { computeBotShot } from '../game/bot';
-import { simulateShot } from '../../../shared/physics';
+import { simulateShot, getTerrainHeight } from '../../../shared/physics';
 import type { BiomeType, BotDifficulty, GameState, WeaponType } from '../../../shared/types';
 
 const router = Router();
@@ -176,10 +176,11 @@ router.post('/:id/invite', async (req: AuthRequest, res: Response): Promise<void
 
 // POST /api/games/:id/turn
 router.post('/:id/turn', async (req: AuthRequest, res: Response): Promise<void> => {
-  const { angle, power, weaponType } = req.body as {
+  const { angle, power, weaponType, movement } = req.body as {
     angle?: number;
     power?: number;
     weaponType?: WeaponType;
+    movement?: number;
   };
 
   if (angle === undefined || power === undefined || !weaponType) {
@@ -197,6 +198,17 @@ router.post('/:id/turn', async (req: AuthRequest, res: Response): Promise<void> 
   }
   if (!['shell', 'bouncer', 'cluster'].includes(weaponType)) {
     res.status(400).json({ error: 'invalid weaponType' });
+    return;
+  }
+
+  const CANVAS_WIDTH = 800;
+  const CANVAS_HEIGHT = 500;
+  const MAX_MOVEMENT = 60;
+
+  // Validate movement if provided
+  const moveDelta = movement ?? 0;
+  if (Math.abs(moveDelta) > MAX_MOVEMENT) {
+    res.status(400).json({ error: `movement must be within ±${MAX_MOVEMENT}px` });
     return;
   }
 
@@ -234,22 +246,38 @@ router.post('/:id/turn', async (req: AuthRequest, res: Response): Promise<void> 
     }
 
     const state: GameState = game.game_state as GameState;
+    const shooterIndex = state.currentPlayerIndex;
+    const currentTank = state.tanks[shooterIndex];
+
+    // Apply movement: clamp to canvas bounds
+    const newX = Math.max(0, Math.min(CANVAS_WIDTH - 1, currentTank.x + moveDelta));
+    if (newX !== currentTank.x + moveDelta && moveDelta !== 0) {
+      // Movement would push tank out of bounds — clamp silently (client already clamps)
+    }
+    const newY = CANVAS_HEIGHT - getTerrainHeight(state.terrain, newX);
+
+    // Build state with moved tank before simulating the shot
+    const movedState: GameState = {
+      ...state,
+      tanks: state.tanks.map((t, i) =>
+        i === shooterIndex ? { ...t, x: newX, y: newY, movementRemaining: 0 } : t,
+      ),
+    };
 
     // Run physics
-    const shotResult = simulateShot(state, angle, power, weaponType);
+    const shotResult = simulateShot(movedState, angle, power, weaponType);
 
     // Update tank health
-    const shooterIndex = state.currentPlayerIndex;
     const targetIndex = shooterIndex === 0 ? 1 : 0;
-    const newTanks = state.tanks.map((t, i) => {
-      if (i === targetIndex) {
-        return { ...t, health: Math.max(0, t.health - shotResult.damageDealt) };
-      }
-      return t;
-    });
-
     const nextPlayerIndex = shooterIndex === 0 ? 1 : 0;
     const newWind = Math.round((Math.random() * 20 - 10) * 10) / 10;
+
+    const newTanks = movedState.tanks.map((t, i) => {
+      if (i === targetIndex) {
+        return { ...t, health: Math.max(0, t.health - shotResult.damageDealt), movementRemaining: 60 };
+      }
+      return { ...t, movementRemaining: i === nextPlayerIndex ? 60 : 0 };
+    });
 
     const newState: GameState = {
       tanks: newTanks,
@@ -282,13 +310,27 @@ router.post('/:id/turn', async (req: AuthRequest, res: Response): Promise<void> 
       humanShotSnapshot = newState; // save human's intermediate state for client animation
       const botDifficulty: BotDifficulty = (state.botDifficulty as BotDifficulty) ?? 'medium';
       const botMove = computeBotShot(newState, botDifficulty);
-      const botResult = simulateShot(newState, botMove.angle, botMove.power, botMove.weaponType);
+
+      // Apply bot movement before simulating shot
+      const botTankIndex = newState.currentPlayerIndex;
+      const botTank = newState.tanks[botTankIndex];
+      const botNewX = Math.max(0, Math.min(CANVAS_WIDTH - 1, botTank.x + botMove.movement));
+      const botNewY = CANVAS_HEIGHT - getTerrainHeight(newState.terrain, botNewX);
+      const botMovedState: GameState = {
+        ...newState,
+        tanks: newState.tanks.map((t, i) =>
+          i === botTankIndex ? { ...t, x: botNewX, y: botNewY } : t,
+        ),
+      };
+
+      const botResult = simulateShot(botMovedState, botMove.angle, botMove.power, botMove.weaponType);
 
       // Bot (index 1) always shoots at the human (index 0)
       const botTargetIndex = 0;
-      const afterBotTanks = newState.tanks.map((t, i) => ({
+      const afterBotTanks = botMovedState.tanks.map((t, i) => ({
         ...t,
         health: i === botTargetIndex ? Math.max(0, t.health - botResult.damageDealt) : t.health,
+        movementRemaining: 60,
       }));
 
       isFinishedByBot = afterBotTanks[botTargetIndex].health <= 0;
