@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import type { GameRecord, WeaponType } from 'shared';
+import type { GameRecord, GameState, WeaponType } from 'shared';
 import { render, type RenderState } from './renderer';
 
 const CANVAS_WIDTH = 800;
@@ -9,13 +9,22 @@ const ANIM_STEP_PER_FRAME = 4; // path points to advance per animation frame
 interface Props {
   game: GameRecord;
   myUserId: string;
+  /** When playing vs bot: the intermediate state after the human's shot (before bot fires). */
+  preBotState?: GameState;
   onTurnSubmit: (angle: number, power: number, weaponType: WeaponType) => Promise<void>;
 }
 
-export default function GameCanvas({ game, myUserId, onTurnSubmit }: Props): React.ReactElement {
+export default function GameCanvas({
+  game,
+  myUserId,
+  preBotState,
+  onTurnSubmit,
+}: Props): React.ReactElement {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rafRef = useRef<number>(0);
   const stateRef = useRef<RenderState | null>(null);
+  // Holds the final game state to animate as the second phase (bot's shot)
+  const pendingBotStateRef = useRef<GameState | null>(null);
 
   const state = game.game_state;
   const myPlayerIndex = state.tanks[0].playerId === myUserId ? 0 : 1;
@@ -26,6 +35,7 @@ export default function GameCanvas({ game, myUserId, onTurnSubmit }: Props): Rea
   const [weapon, setWeapon] = useState<WeaponType>('shell');
   const [firing, setFiring] = useState(false);
   const [animating, setAnimating] = useState(false);
+  const [animPhase, setAnimPhase] = useState<'human' | 'bot' | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   // Initialise / update render state when game changes
@@ -73,12 +83,26 @@ export default function GameCanvas({ game, myUserId, onTurnSubmit }: Props): Rea
           } else {
             rs.explosionFrame += 1;
             if (rs.explosionFrame > 25) {
-              // Animation finished — apply final terrain
+              // Apply final terrain for this phase
               rs.displayTerrain = [...shot.terrainAfter];
               rs.animFrame = null;
               rs.animPathIndex = 0;
               rs.explosionFrame = 0;
-              setAnimating(false);
+
+              const nextBotState = pendingBotStateRef.current;
+              if (nextBotState && nextBotState.lastShot) {
+                // Switch to bot's shot animation
+                pendingBotStateRef.current = null;
+                rs.gameState = nextBotState;
+                rs.displayTerrain = [...nextBotState.lastShot.terrainAfter];
+                rs.animFrame = 0;
+                rs.animPathIndex = 0;
+                rs.explosionFrame = 0;
+                setAnimPhase('bot');
+              } else {
+                setAnimating(false);
+                setAnimPhase(null);
+              }
             }
           }
         }
@@ -94,27 +118,32 @@ export default function GameCanvas({ game, myUserId, onTurnSubmit }: Props): Rea
     return () => cancelAnimationFrame(rafRef.current);
   }, [startAnimLoop]);
 
-  // When a new game state arrives with a lastShot, kick off replay animation
+  // When a new game state arrives (after a turn), kick off replay animation.
+  // For bot games, preBotState contains the human's shot; game.game_state has the bot's shot.
+  // We animate them sequentially: human first, then bot.
   useEffect(() => {
     if (!stateRef.current) return;
     const rs = stateRef.current;
-    rs.gameState = state;
-    // If there's a lastShot, start animating from the original (pre-crater) terrain
-    if (state.lastShot) {
-      rs.displayTerrain = [...state.terrain]; // this is post-shot terrain from server
-      // But to animate the shot, show pre-shot terrain first then apply crater at the end
-      // The pre-shot terrain = terrainAfter minus crater, but server only provides terrainAfter
-      // So we display post-shot terrain throughout and just animate the projectile path
-      rs.displayTerrain = [...state.lastShot.terrainAfter];
+
+    const firstState = preBotState ?? state;
+    const hasBotPhase = preBotState !== undefined && state.lastShot !== undefined;
+
+    rs.gameState = firstState;
+
+    if (firstState.lastShot) {
+      rs.displayTerrain = [...firstState.lastShot.terrainAfter];
       rs.animFrame = 0;
       rs.animPathIndex = 0;
       rs.explosionFrame = 0;
+      pendingBotStateRef.current = hasBotPhase ? state : null;
+      setAnimPhase('human');
       setAnimating(true);
     } else {
       rs.displayTerrain = [...state.terrain];
       rs.animFrame = null;
+      pendingBotStateRef.current = null;
     }
-  }, [game.updated_at]);
+  }, [game.updated_at]); // preBotState and state captured from closure; both update together
 
   // Mouse drag on canvas to adjust angle
   const isDragging = useRef(false);
@@ -266,7 +295,9 @@ export default function GameCanvas({ game, myUserId, onTurnSubmit }: Props): Rea
       )}
 
       {animating && (
-        <p style={{ color: '#f1c40f' }}>Replaying last shot…</p>
+        <p style={{ color: animPhase === 'bot' ? '#e67e22' : '#f1c40f' }}>
+          {animPhase === 'bot' ? '🤖 Bot is firing…' : '💥 Replaying last shot…'}
+        </p>
       )}
 
       {game.status === 'finished' && (

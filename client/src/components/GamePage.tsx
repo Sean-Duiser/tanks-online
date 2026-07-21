@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import type { GameRecord, WeaponType } from 'shared';
+import type { GameRecord, GameState, WeaponType } from 'shared';
 import { getGame, submitTurn } from '../api/client';
 import GameCanvas from '../game/GameCanvas';
 
@@ -10,6 +10,7 @@ export default function GamePage(): React.ReactElement {
   const [game, setGame] = useState<GameRecord | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [preBotState, setPreBotState] = useState<GameState | undefined>();
 
   const myUserId = localStorage.getItem('userId') ?? '';
 
@@ -30,9 +31,10 @@ export default function GamePage(): React.ReactElement {
     loadGame();
   }, [loadGame]);
 
-  // Poll when it's not our turn and game is still active
+  // Poll when it's not our turn and game is still active (skip for bot games — bot fires instantly)
   useEffect(() => {
     if (!game) return;
+    if (game.game_state.isBot) return;
     const myPlayerIndex = game.game_state.tanks[0].playerId === myUserId ? 0 : 1;
     const isMyTurn = game.game_state.currentPlayerIndex === myPlayerIndex;
 
@@ -48,8 +50,12 @@ export default function GamePage(): React.ReactElement {
     weaponType: WeaponType,
   ): Promise<void> {
     if (!id) return;
-    const updated = await submitTurn(id, angle, power, weaponType);
-    setGame(updated);
+    setPreBotState(undefined); // clear previous bot snapshot
+    const response = await submitTurn(id, angle, power, weaponType);
+    if (response.humanShotSnapshot) {
+      setPreBotState(response.humanShotSnapshot);
+    }
+    setGame(response.game);
   }
 
   if (loading) {
@@ -74,8 +80,9 @@ export default function GamePage(): React.ReactElement {
   const state = game.game_state;
   const myPlayerIndex = state.tanks[0].playerId === myUserId ? 0 : 1;
   const opponentIndex = myPlayerIndex === 0 ? 1 : 0;
-  const opponentName =
-    myPlayerIndex === 0
+  const opponentName = state.isBot
+    ? `CPU (${(state.botDifficulty ?? 'medium').charAt(0).toUpperCase() + (state.botDifficulty ?? 'medium').slice(1)})`
+    : myPlayerIndex === 0
       ? (game.player2_username ?? 'Waiting…')
       : (game.player1_username ?? '?');
   const myTank = state.tanks[myPlayerIndex];
@@ -108,7 +115,12 @@ export default function GamePage(): React.ReactElement {
               </p>
             </div>
           ) : (
-            <GameCanvas game={game} myUserId={myUserId} onTurnSubmit={handleTurnSubmit} />
+            <GameCanvas
+              game={game}
+              myUserId={myUserId}
+              preBotState={preBotState}
+              onTurnSubmit={handleTurnSubmit}
+            />
           )}
         </div>
 

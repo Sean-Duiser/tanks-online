@@ -2,8 +2,9 @@ import { Router, Response } from 'express';
 import { pool } from '../db/pool';
 import { requireAuth, AuthRequest } from '../middleware/auth';
 import { generateTerrain, placeTanks } from '../game/terrain';
+import { computeBotShot } from '../game/bot';
 import { simulateShot } from '../../../shared/physics';
-import type { BiomeType, GameState, WeaponType } from '../../../shared/types';
+import type { BiomeType, BotDifficulty, GameState, WeaponType } from '../../../shared/types';
 
 const router = Router();
 
@@ -34,30 +35,47 @@ router.get('/', async (req: AuthRequest, res: Response): Promise<void> => {
 // POST /api/games — create new game
 router.post('/', async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { biome: requestedBiome } = req.body as { biome?: string };
+    const { biome: requestedBiome, vsBot, botDifficulty: rawDiff } = req.body as {
+      biome?: string;
+      vsBot?: boolean;
+      botDifficulty?: string;
+    };
     const BIOMES: BiomeType[] = ['earth', 'fire', 'water', 'air'];
     const biome: BiomeType = BIOMES.includes(requestedBiome as BiomeType)
       ? (requestedBiome as BiomeType)
       : BIOMES[Math.floor(Math.random() * BIOMES.length)];
 
+    const isBotGame = vsBot === true;
+    const DIFFS: BotDifficulty[] = ['easy', 'medium', 'hard'];
+    const botDiff: BotDifficulty = DIFFS.includes(rawDiff as BotDifficulty)
+      ? (rawDiff as BotDifficulty)
+      : 'medium';
+
     const terrain = generateTerrain(biome);
-    const tanks = placeTanks(terrain, req.userId as string, '__tbd__');
+    // Bot tank uses '__bot__' as player ID so it's never confused with a real user
+    const p2Id = isBotGame ? '__bot__' : '__tbd__';
+    const tanks = placeTanks(terrain, req.userId as string, p2Id);
 
     const initialState: GameState = {
       tanks,
       terrain,
       biome,
+      isBot: isBotGame,
+      ...(isBotGame ? { botDifficulty: botDiff } : {}),
       wind: Math.round((Math.random() * 20 - 10) * 10) / 10,
       turnNumber: 0,
       currentPlayerIndex: 0,
     };
 
+    // Bot games start active immediately — no invite needed
+    const status = isBotGame ? 'active' : 'waiting';
+
     const result = await pool.query(
       `INSERT INTO games
-         (player1_id, current_turn_player_id, game_state, status)
-       VALUES ($1, $1, $2, 'waiting')
+         (player1_id, current_turn_player_id, game_state, status, bot_difficulty)
+       VALUES ($1, $1, $2, $3, $4)
        RETURNING *`,
-      [req.userId, JSON.stringify(initialState)],
+      [req.userId, JSON.stringify(initialState), status, isBotGame ? botDiff : null],
     );
 
     const row = result.rows[0] as { id: string };
@@ -238,6 +256,7 @@ router.post('/:id/turn', async (req: AuthRequest, res: Response): Promise<void> 
       terrain: shotResult.terrainAfter,
       wind: newWind,
       biome: state.biome,
+      ...(state.isBot ? { isBot: true, botDifficulty: state.botDifficulty } : {}),
       turnNumber: state.turnNumber + 1,
       currentPlayerIndex: nextPlayerIndex,
       lastShot: {
@@ -252,26 +271,76 @@ router.post('/:id/turn', async (req: AuthRequest, res: Response): Promise<void> 
       },
     };
 
-    const isFinished = newTanks[targetIndex].health <= 0;
+    const isFinishedByHuman = newTanks[targetIndex].health <= 0;
+
+    // For bot games: auto-fire the bot in the same request cycle
+    let finalState: GameState = newState;
+    let humanShotSnapshot: GameState | null = null;
+    let isFinishedByBot = false;
+
+    if (!isFinishedByHuman && state.isBot === true) {
+      humanShotSnapshot = newState; // save human's intermediate state for client animation
+      const botDifficulty: BotDifficulty = (state.botDifficulty as BotDifficulty) ?? 'medium';
+      const botMove = computeBotShot(newState, botDifficulty);
+      const botResult = simulateShot(newState, botMove.angle, botMove.power, botMove.weaponType);
+
+      // Bot (index 1) always shoots at the human (index 0)
+      const botTargetIndex = 0;
+      const afterBotTanks = newState.tanks.map((t, i) => ({
+        ...t,
+        health: i === botTargetIndex ? Math.max(0, t.health - botResult.damageDealt) : t.health,
+      }));
+
+      isFinishedByBot = afterBotTanks[botTargetIndex].health <= 0;
+      const windAfterBot = Math.round((Math.random() * 20 - 10) * 10) / 10;
+
+      finalState = {
+        tanks: afterBotTanks,
+        terrain: botResult.terrainAfter,
+        wind: windAfterBot,
+        biome: state.biome,
+        isBot: true,
+        botDifficulty: state.botDifficulty,
+        turnNumber: newState.turnNumber + 1,
+        currentPlayerIndex: 0, // always back to human after bot fires
+        lastShot: {
+          angle: botMove.angle,
+          power: botMove.power,
+          weaponType: botMove.weaponType,
+          path: botResult.path,
+          hitX: botResult.hitX,
+          hitY: botResult.hitY,
+          damageDealt: botResult.damageDealt,
+          terrainAfter: botResult.terrainAfter,
+        },
+      };
+    }
+
+    const isFinished = isFinishedByHuman || isFinishedByBot;
     const newStatus = isFinished ? 'finished' : 'active';
-    const winnerId = isFinished ? req.userId : null;
-    const nextTurnPlayerId = isFinished
-      ? req.userId
-      : game[nextPlayerIndex === 0 ? 'player1_id' : 'player2_id'];
+    // Human win → winner_id = human; bot win → winner_id stays NULL
+    const winnerId = isFinishedByHuman ? req.userId : null;
+
+    const nextTurnPlayerId: string = state.isBot
+      ? (game.player1_id as string) // bot games: human always goes next
+      : isFinished
+        ? (req.userId as string)
+        : (game[nextPlayerIndex === 0 ? 'player1_id' : 'player2_id'] as string);
 
     await client.query(
       `UPDATE games
-       SET game_state = $1,
-           status = $2,
-           winner_id = COALESCE($3, winner_id),
-           turn_number = turn_number + 1,
-           current_turn_player_id = $4,
-           updated_at = NOW()
-       WHERE id = $5`,
+       SET game_state             = $1,
+           status                 = $2,
+           winner_id              = COALESCE($3, winner_id),
+           turn_number            = $4,
+           current_turn_player_id = $5,
+           updated_at             = NOW()
+       WHERE id = $6`,
       [
-        JSON.stringify(newState),
+        JSON.stringify(finalState),
         newStatus,
         winnerId,
+        finalState.turnNumber,
         nextTurnPlayerId,
         req.params['id'],
       ],
@@ -288,7 +357,8 @@ router.post('/:id/turn', async (req: AuthRequest, res: Response): Promise<void> 
       [req.params['id']],
     );
 
-    res.json(updatedResult.rows[0]);
+    // Include humanShotSnapshot so the client can animate both shots sequentially
+    res.json({ game: updatedResult.rows[0], humanShotSnapshot });
   } catch (err) {
     await client.query('ROLLBACK');
     console.error('Turn error:', err);

@@ -1,5 +1,5 @@
 /// <reference types="vite/client" />
-import type { GameRecord, GameInvite, User } from 'shared';
+import type { GameRecord, GameInvite, GameState, User } from 'shared';
 
 const BASE = import.meta.env.VITE_API_URL ?? '';
 
@@ -48,12 +48,25 @@ export function login(
 }
 
 // Games
+export interface TurnResponse {
+  game: GameRecord;
+  humanShotSnapshot: GameState | null;
+}
+
 export function listGames(): Promise<GameRecord[]> {
   return request('/api/games', { headers: authHeaders() });
 }
 
-export function createGame(): Promise<GameRecord> {
-  return request('/api/games', { method: 'POST', headers: authHeaders() });
+export function createGame(opts?: {
+  biome?: string;
+  vsBot?: boolean;
+  botDifficulty?: string;
+}): Promise<GameRecord> {
+  return request('/api/games', {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify(opts ?? {}),
+  });
 }
 
 export function getGame(id: string): Promise<GameRecord> {
@@ -73,7 +86,7 @@ export function submitTurn(
   angle: number,
   power: number,
   weaponType: string,
-): Promise<GameRecord> {
+): Promise<TurnResponse> {
   return request(`/api/games/${gameId}/turn`, {
     method: 'POST',
     headers: authHeaders(),

@@ -33,4 +33,7 @@ CREATE TABLE IF NOT EXISTS game_invites (
                            CHECK (status IN ('pending', 'accepted', 'declined')),
   created_at   TIMESTAMPTZ DEFAULT NOW()
 );
+
+ALTER TABLE games ADD COLUMN IF NOT EXISTS
+  bot_difficulty TEXT CHECK (bot_difficulty IN ('easy', 'medium', 'hard'));
 `;

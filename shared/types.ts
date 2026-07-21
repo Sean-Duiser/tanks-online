@@ -24,11 +24,15 @@ export type WeaponType = 'shell' | 'bouncer' | 'cluster';
 
 export type BiomeType = 'earth' | 'fire' | 'water' | 'air';
 
+export type BotDifficulty = 'easy' | 'medium' | 'hard';
+
 export interface GameState {
   tanks: Tank[];           // exactly 2 tanks
   terrain: number[];       // height array (same as TerrainSegment.heights)
   wind: number;            // -10 to 10 (negative = left, positive = right)
   biome: BiomeType;
+  isBot?: boolean;
+  botDifficulty?: BotDifficulty;
   turnNumber: number;
   currentPlayerIndex: number; // 0 or 1
   lastShot?: {

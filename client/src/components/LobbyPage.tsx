@@ -10,6 +10,8 @@ import {
   invitePlayer,
 } from '../api/client';
 
+type BotDiff = 'easy' | 'medium' | 'hard';
+
 export default function LobbyPage(): React.ReactElement {
   const navigate = useNavigate();
   const [games, setGames] = useState<GameRecord[]>([]);
@@ -20,6 +22,8 @@ export default function LobbyPage(): React.ReactElement {
   const [inviteGameId, setInviteGameId] = useState<string | null>(null);
   const [inviteUsername, setInviteUsername] = useState('');
   const [inviteError, setInviteError] = useState<string | null>(null);
+  const [showBotPanel, setShowBotPanel] = useState(false);
+  const [botDiff, setBotDiff] = useState<BotDiff>('medium');
 
   const myUserId = localStorage.getItem('userId') ?? '';
   const myUsername = localStorage.getItem('username') ?? '';
@@ -53,6 +57,20 @@ export default function LobbyPage(): React.ReactElement {
       setError(err instanceof Error ? err.message : 'Failed to create game');
     } finally {
       setCreating(false);
+    }
+  }
+
+  async function handleCreateBotGame() {
+    setCreating(true);
+    setError(null);
+    try {
+      const game = await createGame({ vsBot: true, botDifficulty: botDiff });
+      navigate(`/game/${game.id}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to create game');
+    } finally {
+      setCreating(false);
+      setShowBotPanel(false);
     }
   }
 
@@ -94,6 +112,10 @@ export default function LobbyPage(): React.ReactElement {
   }
 
   function gameLabel(g: GameRecord): string {
+    if (g.game_state.isBot) {
+      const diff = g.game_state.botDifficulty ?? 'medium';
+      return `vs CPU (${diff.charAt(0).toUpperCase() + diff.slice(1)})`;
+    }
     const opponent =
       g.player1_id === myUserId
         ? (g.player2_username ?? 'Waiting for opponent…')
@@ -148,10 +170,58 @@ export default function LobbyPage(): React.ReactElement {
         <section style={styles.section}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <h2 style={styles.sectionTitle}>🎮 My Games</h2>
-            <button onClick={handleCreateGame} disabled={creating} style={styles.createBtn}>
-              {creating ? 'Creating…' : '+ New Game'}
-            </button>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                onClick={() => setShowBotPanel((v) => !v)}
+                disabled={creating}
+                style={styles.botBtn}
+              >
+                🤖 Play vs CPU
+              </button>
+              <button onClick={handleCreateGame} disabled={creating} style={styles.createBtn}>
+                {creating ? 'Creating…' : '+ New Game'}
+              </button>
+            </div>
           </div>
+
+          {/* CPU difficulty picker */}
+          {showBotPanel && (
+            <div style={styles.botPanel}>
+              <p style={{ color: '#f0f6fc', marginBottom: 10, fontWeight: 'bold' }}>
+                Choose difficulty:
+              </p>
+              <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+                {(['easy', 'medium', 'hard'] as BotDiff[]).map((d) => (
+                  <button
+                    key={d}
+                    onClick={() => setBotDiff(d)}
+                    style={{
+                      ...styles.diffBtn,
+                      background: botDiff === d ? diffColors[d] : '#21262d',
+                      borderColor: botDiff === d ? diffColors[d] : '#30363d',
+                    }}
+                  >
+                    {d.charAt(0).toUpperCase() + d.slice(1)}
+                  </button>
+                ))}
+              </div>
+              <p style={{ color: '#8b949e', fontSize: 12, marginBottom: 10 }}>
+                {diffDescriptions[botDiff]}
+              </p>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  onClick={handleCreateBotGame}
+                  disabled={creating}
+                  style={styles.createBtn}
+                >
+                  {creating ? 'Creating…' : '▶ Start'}
+                </button>
+                <button onClick={() => setShowBotPanel(false)} style={styles.declineBtn}>
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
 
           {loading ? (
             <p style={{ color: '#8b949e' }}>Loading…</p>
@@ -226,6 +296,18 @@ export default function LobbyPage(): React.ReactElement {
     </div>
   );
 }
+
+const diffColors: Record<string, string> = {
+  easy: '#238636',
+  medium: '#b08800',
+  hard: '#c0392b',
+};
+
+const diffDescriptions: Record<string, string> = {
+  easy: 'Random shots — good for beginners.',
+  medium: 'Calculates trajectory with some random error.',
+  hard: 'Near-perfect aim. Picks the deadliest weapon. Good luck.',
+};
 
 const styles: Record<string, React.CSSProperties> = {
   page: {
@@ -330,6 +412,33 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 'bold',
     cursor: 'pointer',
     fontSize: 14,
+  },
+  botBtn: {
+    padding: '8px 16px',
+    background: '#1f3858',
+    border: '1px solid #1f6feb',
+    borderRadius: 6,
+    color: '#58a6ff',
+    fontWeight: 'bold',
+    cursor: 'pointer',
+    fontSize: 14,
+  },
+  botPanel: {
+    marginTop: 16,
+    padding: 16,
+    background: '#0d1117',
+    border: '1px solid #1f6feb',
+    borderRadius: 8,
+  },
+  diffBtn: {
+    flex: 1,
+    padding: '7px 0',
+    border: '1px solid',
+    borderRadius: 6,
+    color: '#fff',
+    fontWeight: 'bold',
+    cursor: 'pointer',
+    fontSize: 13,
   },
   openBtn: {
     padding: '6px 14px',
