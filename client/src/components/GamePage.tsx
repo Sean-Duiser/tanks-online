@@ -48,10 +48,11 @@ export default function GamePage(): React.ReactElement {
     angle: number,
     power: number,
     weaponType: WeaponType,
+    movement: number,
   ): Promise<void> {
     if (!id) return;
     setPreBotState(undefined); // clear previous bot snapshot
-    const response = await submitTurn(id, angle, power, weaponType);
+    const response = await submitTurn(id, angle, power, weaponType, movement);
     if (response.humanShotSnapshot) {
       setPreBotState(response.humanShotSnapshot);
     }

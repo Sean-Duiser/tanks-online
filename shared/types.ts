@@ -1,11 +1,12 @@
 export interface Tank {
   playerId: string;
-  x: number;        // pixel position on terrain
-  y: number;        // pixel position (base of tank, sits on terrain)
-  health: number;   // 0-100
-  color: string;    // 'red' | 'blue'
-  angle: number;    // degrees, 0-180 (barrel angle)
-  power: number;    // 0-100
+  x: number;              // pixel position on terrain
+  y: number;              // pixel position (base of tank, sits on terrain)
+  health: number;         // 0-100
+  color: string;          // 'red' | 'blue'
+  angle: number;          // degrees, 0-180 (barrel angle)
+  power: number;          // 0-100
+  movementRemaining: number; // px of movement budget remaining this turn (starts at 60)
 }
 
 export interface TerrainSegment {

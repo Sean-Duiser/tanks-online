@@ -86,11 +86,12 @@ export function submitTurn(
   angle: number,
   power: number,
   weaponType: string,
+  movement?: number,
 ): Promise<TurnResponse> {
   return request(`/api/games/${gameId}/turn`, {
     method: 'POST',
     headers: authHeaders(),
-    body: JSON.stringify({ angle, power, weaponType }),
+    body: JSON.stringify({ angle, power, weaponType, ...(movement !== undefined ? { movement } : {}) }),
   });
 }
 

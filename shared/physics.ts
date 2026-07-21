@@ -6,6 +6,15 @@ const CANVAS_HEIGHT = 500;
 const GRAVITY = 9.8 / 60;
 const MAX_TICKS = 5000;
 
+/**
+ * Return the terrain height (pixels from canvas bottom) at a given x position.
+ * x is clamped to valid array bounds.
+ */
+export function getTerrainHeight(terrain: number[], x: number): number {
+  const xi = Math.max(0, Math.min(terrain.length - 1, Math.round(x)));
+  return terrain[xi];
+}
+
 export interface ShotResult {
   path: Array<{ x: number; y: number }>;
   hitX: number;

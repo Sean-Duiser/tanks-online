@@ -104,6 +104,7 @@ export function placeTanks(
       color: 'red',
       angle: 45,
       power: 50,
+      movementRemaining: 60,
     },
     {
       playerId: player2Id,
@@ -113,6 +114,7 @@ export function placeTanks(
       color: 'blue',
       angle: 45,
       power: 50,
+      movementRemaining: 60,
     },
   ];
 }
