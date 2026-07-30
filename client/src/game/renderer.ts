@@ -454,7 +454,7 @@ export function render(
 
   // Move rendered position toward target at a fixed 1.5 px/frame — steady,
   // methodical, no acceleration or deceleration.
-  const MOVE_SPEED = 1.5;
+  const MOVE_SPEED = 0.5;
   const moveDiff = movementDelta - rs.renderedMovementDelta;
   if (Math.abs(moveDiff) <= MOVE_SPEED) {
     rs.renderedMovementDelta = movementDelta;
