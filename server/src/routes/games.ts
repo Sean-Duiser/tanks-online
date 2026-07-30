@@ -222,7 +222,7 @@ router.post('/:id/turn', async (req: AuthRequest, res: Response): Promise<void> 
        LEFT JOIN users u1 ON g.player1_id = u1.id
        LEFT JOIN users u2 ON g.player2_id = u2.id
        WHERE g.id = $1
-       FOR UPDATE`,
+       FOR UPDATE OF g`,
       [req.params['id']],
     );
 
