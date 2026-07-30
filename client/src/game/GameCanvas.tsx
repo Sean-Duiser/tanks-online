@@ -208,8 +208,10 @@ export default function GameCanvas({
     }
   }, [isMyTurn, animating, firing, onTurnSubmit, angle, power, weapon, movementDelta]);
 
-  // Global key handler — attached to window so arrow keys work even when a
-  // slider or button inside the panel has focus.
+  const weapons: WeaponType[] = ['shell', 'bouncer', 'cluster'];
+
+  // Global key handler — capture phase so we intercept BEFORE range sliders
+  // and other elements process the same key.
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
       if (!isMyTurn || animating) return;
@@ -274,11 +276,9 @@ export default function GameCanvas({
       }
     }
 
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    window.addEventListener('keydown', handleKeyDown, { capture: true });
+    return () => window.removeEventListener('keydown', handleKeyDown, { capture: true });
   }, [isMyTurn, animating, state, myPlayerIndex, handleFire]);
-
-  const weapons: WeaponType[] = ['shell', 'bouncer', 'cluster'];
 
   /** Compute the preview position of the player's tank after accumulated movement. */
   function getPreviewTankPos(): { x: number; y: number } {
@@ -414,6 +414,14 @@ export default function GameCanvas({
           >
             {firing ? 'Firing…' : '🔥 FIRE!'}
           </button>
+
+          <div style={styles.keyHints}>
+            <span>← → move</span>
+            <span>↑ ↓ angle</span>
+            <span>W S power</span>
+            <span>Q E weapon</span>
+            <span>Space fire</span>
+          </div>
         </div>
       )}
 
@@ -532,5 +540,14 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 16,
     cursor: 'pointer',
     letterSpacing: 1,
+  },
+  keyHints: {
+    display: 'flex',
+    justifyContent: 'center',
+    gap: 16,
+    flexWrap: 'wrap' as const,
+    fontSize: 11,
+    color: '#6e7f8d',
+    paddingTop: 2,
   },
 };
