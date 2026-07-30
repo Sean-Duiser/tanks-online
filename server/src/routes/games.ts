@@ -270,7 +270,7 @@ router.post('/:id/turn', async (req: AuthRequest, res: Response): Promise<void> 
     // Update tank health
     const targetIndex = shooterIndex === 0 ? 1 : 0;
     const nextPlayerIndex = shooterIndex === 0 ? 1 : 0;
-    const newWind = Math.round((Math.random() * 20 - 10) * 10) / 10;
+    const newWind = Math.round(Math.max(-10, Math.min(10, state.wind + (Math.random() * 4 - 2))) * 10) / 10;
 
     const newTanks = movedState.tanks.map((t, i) => {
       if (i === targetIndex) {
@@ -335,7 +335,7 @@ router.post('/:id/turn', async (req: AuthRequest, res: Response): Promise<void> 
       }));
 
       isFinishedByBot = afterBotTanks[botTargetIndex].health <= 0;
-      const windAfterBot = Math.round((Math.random() * 20 - 10) * 10) / 10;
+      const windAfterBot = Math.round(Math.max(-10, Math.min(10, newState.wind + (Math.random() * 4 - 2))) * 10) / 10;
 
       finalState = {
         tanks: afterBotTanks,
