@@ -195,7 +195,7 @@ export default function GameCanvas({
     setAngle(Math.round(deg));
   }
 
-  async function handleFire() {
+  const handleFire = useCallback(async () => {
     if (!isMyTurn || animating || firing) return;
     setFiring(true);
     setError(null);
@@ -206,74 +206,79 @@ export default function GameCanvas({
     } finally {
       setFiring(false);
     }
-  }
+  }, [isMyTurn, animating, firing, onTurnSubmit, angle, power, weapon, movementDelta]);
 
-  function handleKeyDown(e: React.KeyboardEvent) {
-    if (!isMyTurn || animating) return;
-    switch (e.key) {
-      case 'a':
-      case 'A': {
-        // Move tank left
-        e.preventDefault();
-        setMovementDelta((prev) => {
-          const tank = state.tanks[myPlayerIndex];
-          const remaining = MAX_MOVEMENT - Math.abs(prev);
-          const step = Math.min(MOVE_STEP, remaining);
-          const newDelta = Math.max(-(tank.x), Math.max(-MAX_MOVEMENT, prev - step));
-          return newDelta;
-        });
-        break;
+  // Global key handler — attached to window so arrow keys work even when a
+  // slider or button inside the panel has focus.
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (!isMyTurn || animating) return;
+
+      const GAME_KEYS = new Set([
+        'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown',
+        'w', 'W', 's', 'S', 'q', 'Q', 'e', 'E',
+        ' ', 'Enter',
+      ]);
+      if (!GAME_KEYS.has(e.key)) return;
+      e.preventDefault();
+
+      switch (e.key) {
+        case 'ArrowLeft':
+          setMovementDelta((prev) => {
+            const tank = state.tanks[myPlayerIndex];
+            const remaining = MAX_MOVEMENT - Math.abs(prev);
+            const step = Math.min(MOVE_STEP, remaining);
+            return Math.max(-MAX_MOVEMENT, Math.max(-tank.x, prev - step));
+          });
+          break;
+        case 'ArrowRight':
+          setMovementDelta((prev) => {
+            const tank = state.tanks[myPlayerIndex];
+            const remaining = MAX_MOVEMENT - Math.abs(prev);
+            const step = Math.min(MOVE_STEP, remaining);
+            return Math.min(MAX_MOVEMENT, Math.min(CANVAS_WIDTH - 1 - tank.x, prev + step));
+          });
+          break;
+        case 'ArrowUp':
+          setAngle((a) => Math.min(180, a + 1));
+          break;
+        case 'ArrowDown':
+          setAngle((a) => Math.max(0, a - 1));
+          break;
+        case 'w':
+        case 'W':
+          setPower((p) => Math.min(100, p + 1));
+          break;
+        case 's':
+        case 'S':
+          setPower((p) => Math.max(1, p - 1));
+          break;
+        case 'q':
+        case 'Q':
+          setWeapon((w) => {
+            const idx = weapons.indexOf(w);
+            return weapons[(idx - 1 + weapons.length) % weapons.length];
+          });
+          break;
+        case 'e':
+        case 'E':
+          setWeapon((w) => {
+            const idx = weapons.indexOf(w);
+            return weapons[(idx + 1) % weapons.length];
+          });
+          break;
+        case ' ':
+        case 'Enter':
+          handleFire();
+          break;
       }
-      case 'd':
-      case 'D': {
-        // Move tank right
-        e.preventDefault();
-        setMovementDelta((prev) => {
-          const tank = state.tanks[myPlayerIndex];
-          const remaining = MAX_MOVEMENT - Math.abs(prev);
-          const step = Math.min(MOVE_STEP, remaining);
-          const newDelta = Math.min(CANVAS_WIDTH - 1 - tank.x, Math.min(MAX_MOVEMENT, prev + step));
-          return newDelta;
-        });
-        break;
-      }
-      case 'ArrowLeft': {
-        // Move tank left
-        e.preventDefault();
-        setMovementDelta((prev) => {
-          const tank = state.tanks[myPlayerIndex];
-          const remaining = MAX_MOVEMENT - Math.abs(prev);
-          const step = Math.min(MOVE_STEP, remaining);
-          return Math.max(-MAX_MOVEMENT, Math.max(-(tank.x), prev - step));
-        });
-        break;
-      }
-      case 'ArrowRight': {
-        // Move tank right
-        e.preventDefault();
-        setMovementDelta((prev) => {
-          const tank = state.tanks[myPlayerIndex];
-          const remaining = MAX_MOVEMENT - Math.abs(prev);
-          const step = Math.min(MOVE_STEP, remaining);
-          return Math.min(MAX_MOVEMENT, Math.min(CANVAS_WIDTH - 1 - tank.x, prev + step));
-        });
-        break;
-      }
-      case 'ArrowUp':
-        e.preventDefault();
-        setAngle((a) => Math.min(180, a + 1));
-        break;
-      case 'ArrowDown':
-        e.preventDefault();
-        setAngle((a) => Math.max(0, a - 1));
-        break;
-      case ' ':
-      case 'Enter':
-        e.preventDefault();
-        handleFire();
-        break;
     }
-  }
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isMyTurn, animating, state, myPlayerIndex, handleFire]);
+
+  const weapons: WeaponType[] = ['shell', 'bouncer', 'cluster'];
 
   /** Compute the preview position of the player's tank after accumulated movement. */
   function getPreviewTankPos(): { x: number; y: number } {
@@ -282,8 +287,6 @@ export default function GameCanvas({
     const previewY = CANVAS_HEIGHT - getTerrainHeight(state.terrain, previewX);
     return { x: previewX, y: previewY };
   }
-
-  const weapons: WeaponType[] = ['shell', 'bouncer', 'cluster'];
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
@@ -303,7 +306,6 @@ export default function GameCanvas({
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseUp}
-        onKeyDown={handleKeyDown}
       />
 
       {isMyTurn && !animating && (
@@ -343,9 +345,9 @@ export default function GameCanvas({
               })}
               disabled={movementRemaining === 0 || movementDelta <= -(state.tanks[myPlayerIndex]?.x ?? 0)}
               style={styles.moveBtn}
-              title="Move left (A)"
+              title="Move left (←)"
             >
-              ◀ A
+              ◀ ←
             </button>
             <div style={styles.movementBarWrap}>
               <div
@@ -370,9 +372,9 @@ export default function GameCanvas({
               })}
               disabled={movementRemaining === 0 || movementDelta >= CANVAS_WIDTH - 1 - (state.tanks[myPlayerIndex]?.x ?? CANVAS_WIDTH - 1)}
               style={styles.moveBtn}
-              title="Move right (D)"
+              title="Move right (→)"
             >
-              D ▶
+              → ▶
             </button>
           </div>
 
