@@ -453,8 +453,8 @@ export function render(
   const biome: BiomeType = gameState.biome ?? 'earth';
 
   // Lerp rendered position toward target — gives the tank a heavy, sliding feel.
-  // Factor 0.10 ≈ settles in ~30 frames (~500ms at 60fps).
-  const LERP = 0.10;
+  // Factor 0.05 ≈ settles in ~60 frames (~1s at 60fps).
+  const LERP = 0.05;
   rs.renderedMovementDelta += (movementDelta - rs.renderedMovementDelta) * LERP;
 
   ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
