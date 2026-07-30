@@ -3,6 +3,7 @@ import { drawTerrain } from './terrain';
 
 const CANVAS_WIDTH = 800;
 const CANVAS_HEIGHT = 500;
+const MAX_MOVEMENT = 60;
 
 const BARREL_LENGTH = 22;
 
@@ -448,7 +449,7 @@ export function render(
   ctx: CanvasRenderingContext2D,
   rs: RenderState,
 ): void {
-  const { gameState, myPlayerIndex, myAngle, myPower, myWeapon, displayTerrain, movementDelta, movementRemaining } = rs;
+  const { gameState, myPlayerIndex, myAngle, myPower, myWeapon, displayTerrain, movementDelta } = rs;
   const { tanks } = gameState;
   const biome: BiomeType = gameState.biome ?? 'earth';
 
@@ -517,5 +518,7 @@ export function render(
     }
   }
 
-  drawHUD(ctx, gameState, myPlayerIndex, myAngle, myPower, myWeapon, biome, movementRemaining);
+  // Use rendered position for the HUD bar so it drains in sync with the tank
+  const renderedMovementRemaining = Math.round(MAX_MOVEMENT - Math.abs(rs.renderedMovementDelta));
+  drawHUD(ctx, gameState, myPlayerIndex, myAngle, myPower, myWeapon, biome, renderedMovementRemaining);
 }
