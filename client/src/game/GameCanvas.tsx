@@ -237,17 +237,35 @@ export default function GameCanvas({
         });
         break;
       }
-      case 'ArrowLeft':
-        setAngle((a) => Math.max(0, a - 1));
+      case 'ArrowLeft': {
+        // Move tank left
+        e.preventDefault();
+        setMovementDelta((prev) => {
+          const tank = state.tanks[myPlayerIndex];
+          const remaining = MAX_MOVEMENT - Math.abs(prev);
+          const step = Math.min(MOVE_STEP, remaining);
+          return Math.max(-MAX_MOVEMENT, Math.max(-(tank.x), prev - step));
+        });
         break;
-      case 'ArrowRight':
+      }
+      case 'ArrowRight': {
+        // Move tank right
+        e.preventDefault();
+        setMovementDelta((prev) => {
+          const tank = state.tanks[myPlayerIndex];
+          const remaining = MAX_MOVEMENT - Math.abs(prev);
+          const step = Math.min(MOVE_STEP, remaining);
+          return Math.min(MAX_MOVEMENT, Math.min(CANVAS_WIDTH - 1 - tank.x, prev + step));
+        });
+        break;
+      }
+      case 'ArrowUp':
+        e.preventDefault();
         setAngle((a) => Math.min(180, a + 1));
         break;
-      case 'ArrowUp':
-        setPower((p) => Math.min(100, p + 1));
-        break;
       case 'ArrowDown':
-        setPower((p) => Math.max(1, p - 1));
+        e.preventDefault();
+        setAngle((a) => Math.max(0, a - 1));
         break;
       case ' ':
       case 'Enter':
