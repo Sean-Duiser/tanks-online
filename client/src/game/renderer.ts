@@ -440,6 +440,8 @@ export interface RenderState {
   movementDelta: number;
   /** Remaining movement budget for this turn (60 - |movementDelta|) */
   movementRemaining: number;
+  /** Visually rendered movement position — lerps toward movementDelta each frame */
+  renderedMovementDelta: number;
 }
 
 export function render(
@@ -449,6 +451,11 @@ export function render(
   const { gameState, myPlayerIndex, myAngle, myPower, myWeapon, displayTerrain, movementDelta, movementRemaining } = rs;
   const { tanks } = gameState;
   const biome: BiomeType = gameState.biome ?? 'earth';
+
+  // Lerp rendered position toward target — gives the tank a heavy, sliding feel.
+  // Factor 0.10 ≈ settles in ~30 frames (~500ms at 60fps).
+  const LERP = 0.10;
+  rs.renderedMovementDelta += (movementDelta - rs.renderedMovementDelta) * LERP;
 
   ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
   drawBackground(ctx, biome);
@@ -468,9 +475,9 @@ export function render(
         overrides.angle = myAngle;
       }
 
-      // Movement position preview
-      if (movementDelta !== 0) {
-        const previewX = Math.max(0, Math.min(CANVAS_WIDTH - 1, tanks[i].x + movementDelta));
+      // Movement position preview — use smoothed rendered value, not raw delta
+      if (rs.renderedMovementDelta !== 0) {
+        const previewX = Math.max(0, Math.min(CANVAS_WIDTH - 1, tanks[i].x + rs.renderedMovementDelta));
         overrides.x = previewX;
         overrides.y = CANVAS_HEIGHT - displayTerrain[Math.round(previewX)];
       }

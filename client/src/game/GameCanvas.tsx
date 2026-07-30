@@ -58,6 +58,7 @@ export default function GameCanvas({
       displayTerrain: [...state.terrain],
       movementDelta: 0,
       movementRemaining: MAX_MOVEMENT,
+      renderedMovementDelta: 0,
     };
     setMovementDelta(0); // reset movement when game resets
   }, [game.id]); // intentionally only reset on game-id change; angle/power updated below
@@ -140,6 +141,7 @@ export default function GameCanvas({
     setMovementDelta(0);
     if (rs) {
       rs.movementDelta = 0;
+      rs.renderedMovementDelta = 0;
       rs.movementRemaining = MAX_MOVEMENT;
     }
 
