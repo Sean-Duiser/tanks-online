@@ -491,7 +491,7 @@ const styles: Record<string, React.CSSProperties> = {
     left: 0,
     height: '100%',
     borderRadius: 4,
-    transition: 'width 0.17s linear, background 0.2s',
+    transition: 'background 0.2s',
   },
   movementLabel: {
     position: 'absolute',

@@ -518,7 +518,6 @@ export function render(
     }
   }
 
-  // Use rendered position for the HUD bar so it drains in sync with the tank
-  const renderedMovementRemaining = Math.round(MAX_MOVEMENT - Math.abs(rs.renderedMovementDelta));
-  drawHUD(ctx, gameState, myPlayerIndex, myAngle, myPower, myWeapon, biome, renderedMovementRemaining);
+  // Use actual movement budget for the HUD bar (not the rendered position)
+  drawHUD(ctx, gameState, myPlayerIndex, myAngle, myPower, myWeapon, biome, rs.movementRemaining);
 }
